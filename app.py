@@ -8,7 +8,10 @@ try:
     from supabase import create_client
     _url = os.environ.get("SUPABASE_URL") or st.secrets.get("SUPABASE_URL","")
     _key = os.environ.get("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY","")
-    USE_SUPABASE = bool(_url and _key)
+    # Clean URL — remove trailing slash if present
+    _url = _url.strip().rstrip("/")
+    _key = _key.strip()
+    USE_SUPABASE = bool(_url and _key and _url.startswith("https://"))
     if USE_SUPABASE:
         supabase = create_client(_url, _key)
 except Exception:
@@ -515,19 +518,20 @@ def compute_status(due_date_str):
 def db_auth(username, password):
     pw = hash_pw(password)
     if USE_SUPABASE:
-        # Fetch by username+password only, then check active in Python
-        # Avoids PostgreSQL boolean type issues with supabase-py filters
-        r = supabase.table("users").select("*")\
-            .eq("username", username)\
-            .eq("password", pw)\
-            .execute()
-        if not r.data:
+        try:
+            r = supabase.table("users").select("*") \
+                .eq("username", username) \
+                .eq("password", pw) \
+                .execute()
+            if not r.data:
+                return None
+            user = r.data[0]
+            if user.get("active") in (True, 1, "true", "t", "yes"):
+                return user
             return None
-        user = r.data[0]
-        # Check active in Python — works regardless of DB boolean format
-        if user.get("active") in (True, 1, "true", "t", "yes"):
-            return user
-        return None
+        except Exception as e:
+            st.error(f"Database error: {str(e)}")
+            return None
     else:
         conn = get_conn()
         r = conn.execute(
