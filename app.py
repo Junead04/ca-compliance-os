@@ -515,7 +515,13 @@ def compute_status(due_date_str):
 def db_auth(username, password):
     pw = hash_pw(password)
     if USE_SUPABASE:
-        r = supabase.table("users").select("*").eq("username",username).eq("password",pw).eq("active",True).execute()
+        # Use .neq("active", False) instead of .eq("active", True)
+        # to avoid PostgreSQL boolean type mismatch in supabase-py
+        r = supabase.table("users").select("*")\
+            .eq("username", username)\
+            .eq("password", pw)\
+            .neq("active", False)\
+            .execute()
         return r.data[0] if r.data else None
     else:
         conn=get_conn()
