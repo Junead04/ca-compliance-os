@@ -515,17 +515,25 @@ def compute_status(due_date_str):
 def db_auth(username, password):
     pw = hash_pw(password)
     if USE_SUPABASE:
-        # Use .neq("active", False) instead of .eq("active", True)
-        # to avoid PostgreSQL boolean type mismatch in supabase-py
+        # Fetch by username+password only, then check active in Python
+        # Avoids PostgreSQL boolean type issues with supabase-py filters
         r = supabase.table("users").select("*")\
             .eq("username", username)\
             .eq("password", pw)\
-            .neq("active", False)\
             .execute()
-        return r.data[0] if r.data else None
+        if not r.data:
+            return None
+        user = r.data[0]
+        # Check active in Python — works regardless of DB boolean format
+        if user.get("active") in (True, 1, "true", "t", "yes"):
+            return user
+        return None
     else:
-        conn=get_conn()
-        r=conn.execute("SELECT * FROM users WHERE username=? AND password=? AND active=1",(username,pw)).fetchone()
+        conn = get_conn()
+        r = conn.execute(
+            "SELECT * FROM users WHERE username=? AND password=? AND active=1",
+            (username, pw)
+        ).fetchone()
         conn.close()
         return dict(r) if r else None
 
